@@ -1,7 +1,7 @@
 use std::{
     fmt::Display,
     fs::File,
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
     path::Path,
 };
@@ -88,7 +88,7 @@ impl Display for Response {
     }
 }
 
-fn dispatch(mut stream: TcpStream, outfile: &mut File) {
+fn dispatch(mut stream: TcpStream, state: &mut State) {
     let buf_reader = BufReader::new(&mut stream);
     let request: Vec<_> = buf_reader
         .lines()
@@ -103,7 +103,7 @@ fn dispatch(mut stream: TcpStream, outfile: &mut File) {
     assert!(matches!(parts.len(), 1 | 2));
     let response = match parts[0] {
         "/" => index(),
-        "/weight" if parts.len() == 2 => weight(parts[1], outfile),
+        "/weight" if parts.len() == 2 => weight(parts[1], state),
         _ => {
             Response::err().body(include_str!("../templates/error.html").into())
         }
@@ -115,24 +115,43 @@ fn index() -> Response {
     Response::ok().body(include_str!("../templates/index.html").into())
 }
 
-fn weight(query: &str, outfile: &mut File) -> Response {
+fn weight(query: &str, state: &mut State) -> Response {
     let params: Vec<&str> = query.split('=').collect();
     if params.len() != 2 {
         return Response::err();
     }
-    let Ok(w) = params[1].parse::<f64>() else {
+    let Ok(weight) = params[1].parse::<f64>() else {
         return Response::err();
     };
     let now = OffsetDateTime::now_local().unwrap();
-    writeln!(
-        outfile,
-        "{}-{:02}-{:02} {w:.1}",
-        now.year(),
-        now.month() as u8,
-        now.day()
-    )
-    .unwrap();
+    let date =
+        format!("{}-{:02}-{:02}", now.year(), now.month() as u8, now.day());
+    writeln!(state.outfile, "{date} {weight:.1}",).unwrap();
+    state.data.push((date, weight));
     Response::redirect("/")
+}
+
+struct State {
+    data: Vec<(String, f64)>,
+    outfile: File,
+}
+
+fn load_current(contents: String) -> Vec<(String, f64)> {
+    let cur: Vec<_> = contents
+        .lines()
+        .flat_map(|line| {
+            let sp: Vec<_> = line.split_ascii_whitespace().collect();
+            if sp.len() != 2 {
+                return None;
+            }
+            let date = sp[0].to_owned();
+            let Ok(weight) = sp[1].parse::<f64>() else {
+                return None;
+            };
+            Some((date, weight))
+        })
+        .collect();
+    cur
 }
 
 fn main() -> std::io::Result<()> {
@@ -147,14 +166,25 @@ fn main() -> std::io::Result<()> {
     let config_file = config_dir.join("weights.dat");
     let mut config = File::options()
         .create(true)
+        .read(true)
         .append(true)
         .open(config_file)
         .expect("failed to open weights file");
 
+    let mut contents = String::new();
+    config.read_to_string(&mut contents).unwrap();
+
+    let cur = load_current(contents);
+
+    let mut state = State {
+        data: cur,
+        outfile: config,
+    };
+
     let listener = TcpListener::bind("0.0.0.0:9999")?;
 
     for stream in listener.incoming().map(Result::unwrap) {
-        dispatch(stream, &mut config);
+        dispatch(stream, &mut state);
     }
     Ok(())
 }
