@@ -146,7 +146,7 @@ struct State {
 }
 
 fn load_current(contents: String) -> Vec<(String, f64)> {
-    let cur: Vec<_> = contents
+    contents
         .lines()
         .flat_map(|line| {
             let sp: Vec<_> = line.split_ascii_whitespace().collect();
@@ -159,8 +159,7 @@ fn load_current(contents: String) -> Vec<(String, f64)> {
             };
             Some((date, weight))
         })
-        .collect();
-    cur
+        .collect()
 }
 
 fn main() -> std::io::Result<()> {
