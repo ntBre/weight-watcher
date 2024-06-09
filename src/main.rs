@@ -10,13 +10,32 @@ use time::OffsetDateTime;
 
 enum ContentType {
     Html,
+    Png,
 }
 
 impl Display for ContentType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ContentType::Html => write!(f, "text/html"),
+            ContentType::Png => write!(f, "image/png"),
         }
+    }
+}
+
+enum Body {
+    String(String),
+    Bytes(Vec<u8>),
+}
+
+impl From<&str> for Body {
+    fn from(value: &str) -> Self {
+        Self::String(value.into())
+    }
+}
+
+impl From<String> for Body {
+    fn from(value: String) -> Self {
+        Self::String(value)
     }
 }
 
@@ -24,14 +43,14 @@ struct Response {
     status: usize,
     location: Option<&'static str>,
     content_type: ContentType,
-    body: String,
+    body: Body,
 }
 
 impl Response {
     fn ok() -> Self {
         Self {
             status: 200,
-            body: String::new(),
+            body: Body::String(String::new()),
             content_type: ContentType::Html,
             location: None,
         }
@@ -41,7 +60,7 @@ impl Response {
         Self {
             status: 303,
             location: Some(to),
-            body: String::new(),
+            body: Body::String(String::new()),
             content_type: ContentType::Html,
         }
     }
@@ -49,14 +68,19 @@ impl Response {
     fn err() -> Self {
         Self {
             status: 404,
-            body: String::new(),
+            body: Body::String(String::new()),
             content_type: ContentType::Html,
             location: None,
         }
     }
 
-    fn body(mut self, body: String) -> Self {
+    fn body(mut self, body: Body) -> Self {
         self.body = body;
+        self
+    }
+
+    fn content_type(mut self, content_type: ContentType) -> Self {
+        self.content_type = content_type;
         self
     }
 
@@ -70,7 +94,14 @@ impl Response {
     }
 
     fn as_bytes(&self) -> Vec<u8> {
-        self.to_string().into_bytes()
+        let mut header = self.to_string().into_bytes();
+
+        match &self.body {
+            Body::String(s) => header.extend(s.as_bytes()),
+            Body::Bytes(bytes) => header.extend(bytes),
+        }
+
+        header
     }
 }
 
@@ -83,7 +114,7 @@ impl Display for Response {
             write!(f, "Content-Type: {}\r\n", self.content_type)?;
         }
         write!(f, "\r\n")?;
-        write!(f, "{}", self.body)?;
+
         Ok(())
     }
 }
@@ -104,6 +135,9 @@ fn dispatch(mut stream: TcpStream, state: &mut State) {
     let response = match parts[0] {
         "/" => index(state),
         "/weight" if parts.len() == 2 => weight(parts[1], state),
+        f @ "/tmp/weight-watcher.png" => Response::ok()
+            .content_type(ContentType::Png)
+            .body(Body::Bytes(std::fs::read(f).unwrap())),
         _ => {
             Response::err().body(include_str!("../templates/error.html").into())
         }
@@ -121,7 +155,7 @@ fn index(state: &mut State) -> Response {
     let tmpl = read_to_string("templates/index.html")
         .unwrap()
         .replace("{{table}}", &table);
-    Response::ok().body(tmpl)
+    Response::ok().body(tmpl.into())
 }
 
 fn weight(query: &str, state: &mut State) -> Response {
