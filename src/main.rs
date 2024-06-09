@@ -1,7 +1,9 @@
 use std::{
     fmt::Display,
+    fs::File,
     io::{BufRead, BufReader, Write},
     net::{TcpListener, TcpStream},
+    path::Path,
 };
 
 enum ContentType {
@@ -84,7 +86,7 @@ impl Display for Response {
     }
 }
 
-fn dispatch(mut stream: TcpStream) {
+fn dispatch(mut stream: TcpStream, outfile: &mut File) {
     let buf_reader = BufReader::new(&mut stream);
     let request: Vec<_> = buf_reader
         .lines()
@@ -99,7 +101,7 @@ fn dispatch(mut stream: TcpStream) {
     assert!(matches!(parts.len(), 1 | 2));
     let response = match parts[0] {
         "/" => index(),
-        "/weight" if parts.len() == 2 => weight(parts[1]),
+        "/weight" if parts.len() == 2 => weight(parts[1], outfile),
         _ => {
             Response::err().body(include_str!("../templates/error.html").into())
         }
@@ -111,7 +113,7 @@ fn index() -> Response {
     Response::ok().body(include_str!("../templates/index.html").into())
 }
 
-fn weight(query: &str) -> Response {
+fn weight(query: &str, outfile: &mut File) -> Response {
     let params: Vec<&str> = query.split('=').collect();
     if params.len() != 2 {
         return Response::err();
@@ -119,15 +121,30 @@ fn weight(query: &str) -> Response {
     let Ok(w) = params[1].parse::<f64>() else {
         return Response::err();
     };
-    println!("got weight = {w}");
+    writeln!(outfile, "{w}").unwrap();
     Response::redirect("/")
 }
 
 fn main() -> std::io::Result<()> {
+    let home = std::env::var("HOME").unwrap();
+    let home = Path::new(&home);
+    let config_dir = home.join(".config").join("weight-watcher");
+    if !config_dir.exists() {
+        std::fs::create_dir_all(&config_dir)
+            .expect("failed to create config dir");
+    }
+
+    let config = config_dir.join("weights.dat");
+    let mut config = File::options()
+        .create(true)
+        .append(true)
+        .open(config)
+        .expect("failed to open weights file");
+
     let listener = TcpListener::bind("0.0.0.0:9999")?;
 
     for stream in listener.incoming().map(Result::unwrap) {
-        dispatch(stream);
+        dispatch(stream, &mut config);
     }
     Ok(())
 }
