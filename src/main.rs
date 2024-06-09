@@ -146,15 +146,9 @@ fn dispatch(mut stream: TcpStream, state: &mut State) {
 }
 
 fn index(state: &mut State) -> Response {
-    use std::fmt::Write;
-    let mut table = String::new();
-    for (date, weight) in state.data.iter().rev().take(7) {
-        writeln!(table, "<tr><td>{date}</td><td>{weight:.1}</td></tr>")
-            .unwrap();
-    }
     let tmpl = read_to_string("templates/index.html")
         .unwrap()
-        .replace("{{table}}", &table);
+        .replace("{{table}}", &state.html_table());
     Response::ok().body(tmpl.into())
 }
 
@@ -177,6 +171,18 @@ fn weight(query: &str, state: &mut State) -> Response {
 struct State {
     data: Vec<(String, f64)>,
     outfile: File,
+}
+
+impl State {
+    fn html_table(&self) -> String {
+        use std::fmt::Write;
+        let mut table = String::new();
+        for (date, weight) in self.data.iter().rev().take(7) {
+            writeln!(table, "<tr><td>{date}</td><td>{weight:.1}</td></tr>")
+                .unwrap();
+        }
+        table
+    }
 }
 
 fn load_current(contents: String) -> Vec<(String, f64)> {
