@@ -95,7 +95,7 @@ fn dispatch(mut stream: TcpStream, state: &mut State) {
         .map(Result::unwrap)
         .take_while(|line| !line.is_empty())
         .collect();
-    assert!(request.len() >= 1);
+    assert!(!request.is_empty());
     let fields: Vec<_> = request[0].split_ascii_whitespace().collect();
     assert!(fields.len() == 3);
     let url = fields[1];
