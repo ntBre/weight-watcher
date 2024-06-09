@@ -6,6 +6,8 @@ use std::{
     path::Path,
 };
 
+use time::OffsetDateTime;
+
 enum ContentType {
     Html,
 }
@@ -121,7 +123,15 @@ fn weight(query: &str, outfile: &mut File) -> Response {
     let Ok(w) = params[1].parse::<f64>() else {
         return Response::err();
     };
-    writeln!(outfile, "{w}").unwrap();
+    let now = OffsetDateTime::now_local().unwrap();
+    writeln!(
+        outfile,
+        "{}-{:02}-{:02} {w:.1}",
+        now.year(),
+        now.month() as u8,
+        now.day()
+    )
+    .unwrap();
     Response::redirect("/")
 }
 
