@@ -1,7 +1,7 @@
 use std::{
     fmt::Display,
     fs::File,
-    io::{BufRead, BufReader, Read, Write},
+    io::{BufRead, BufReader, Read, Seek, Write},
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -150,6 +150,7 @@ fn dispatch(mut stream: TcpStream, state: &mut State) {
 }
 
 fn index(state: &mut State) -> Response {
+    state.update();
     let tmpl = include_str!("../templates/index.html")
         .replace("{{table}}", &state.html_table());
     state.graph();
@@ -187,6 +188,10 @@ struct State {
 }
 
 impl State {
+    fn update(&mut self) {
+        self.data = load_current(&mut self.outfile);
+    }
+
     fn html_table(&self) -> String {
         use std::fmt::Write;
         let mut table = String::new();
@@ -242,7 +247,10 @@ impl State {
     }
 }
 
-fn load_current(contents: String) -> Vec<(String, f64)> {
+fn load_current(config: &mut File) -> Vec<(String, f64)> {
+    config.rewind().unwrap();
+    let mut contents = String::new();
+    config.read_to_string(&mut contents).unwrap();
     contents
         .lines()
         .flat_map(|line| {
@@ -276,10 +284,7 @@ fn main() -> std::io::Result<()> {
         .open(&config_file)
         .expect("failed to open weights file");
 
-    let mut contents = String::new();
-    config.read_to_string(&mut contents).unwrap();
-
-    let cur = load_current(contents);
+    let cur = load_current(&mut config);
 
     let mut state = State {
         data: cur,
