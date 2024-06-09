@@ -146,8 +146,7 @@ fn dispatch(mut stream: TcpStream, state: &mut State) {
 }
 
 fn index(state: &mut State) -> Response {
-    let tmpl = read_to_string("templates/index.html")
-        .unwrap()
+    let tmpl = include_str!("../templates/index.html")
         .replace("{{table}}", &state.html_table());
     Response::ok().body(tmpl.into())
 }
