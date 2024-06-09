@@ -136,6 +136,9 @@ fn dispatch(mut stream: TcpStream, state: &mut State) {
     let response = match parts[0] {
         "/" => index(state),
         "/weight" if parts.len() == 2 => weight(parts[1], state),
+        "/favicon.ico" => Response::ok()
+            .content_type(ContentType::Png)
+            .body(Body::Bytes(include_bytes!("../logo.png").to_vec())),
         f @ "/tmp/weight-watcher.png" => Response::ok()
             .content_type(ContentType::Png)
             .body(Body::Bytes(std::fs::read(f).unwrap())),
