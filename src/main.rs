@@ -220,9 +220,11 @@ impl State {
         if let (Some(weight_start), Some(weight_end)) = self.minmax() {
             let weight_start = weight_start - WEIGHT_PAD;
             let weight_end = weight_end + WEIGHT_PAD;
-            gp_script = gp_script
-                .replace("{{weight_start}}", &weight_start.to_string())
-                .replace("{{weight_end}}", &weight_end.to_string());
+            let weight_range =
+                format!("set yrange [{}:{}]", weight_start, weight_end);
+            gp_script = gp_script.replace("{{yrange}}", &weight_range);
+        } else {
+            gp_script = gp_script.replace("{{yrange}}", "");
         }
 
         let mut child = Command::new("gnuplot")
@@ -234,7 +236,9 @@ impl State {
             stdin.write_all(gp_script.as_bytes()).unwrap();
         });
         let output = child.wait().unwrap();
-        assert_eq!(output.code(), Some(0));
+        if output.code() != Some(0) {
+            eprintln!("error running gnuplot");
+        }
     }
 }
 

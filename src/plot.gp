@@ -4,7 +4,7 @@ set output "/tmp/weight-watcher.png"
 set timefmt "%Y-%m-%d"
 set xdata time
 set xrange ["{{date_start}}":"{{date_end}}"]
-set yrange [{{weight_start}}:{{weight_end}}]
+{{yrange}}
 set ylabel "Weight"
 set xlabel "Date"
 unset key
