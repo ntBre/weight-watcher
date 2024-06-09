@@ -144,11 +144,11 @@ fn main() -> std::io::Result<()> {
             .expect("failed to create config dir");
     }
 
-    let config = config_dir.join("weights.dat");
+    let config_file = config_dir.join("weights.dat");
     let mut config = File::options()
         .create(true)
         .append(true)
-        .open(config)
+        .open(config_file)
         .expect("failed to open weights file");
 
     let listener = TcpListener::bind("0.0.0.0:9999")?;
