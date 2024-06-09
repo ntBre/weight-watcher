@@ -1,9 +1,10 @@
 use std::{
     fmt::Display,
-    fs::{read_to_string, File},
+    fs::File,
     io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
-    path::Path,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
 };
 
 use time::OffsetDateTime;
@@ -148,6 +149,7 @@ fn dispatch(mut stream: TcpStream, state: &mut State) {
 fn index(state: &mut State) -> Response {
     let tmpl = include_str!("../templates/index.html")
         .replace("{{table}}", &state.html_table());
+    state.graph();
     Response::ok().body(tmpl.into())
 }
 
@@ -160,15 +162,24 @@ fn weight(query: &str, state: &mut State) -> Response {
         return Response::err();
     };
     let now = OffsetDateTime::now_local().unwrap();
-    let date =
-        format!("{}-{:02}-{:02}", now.year(), now.month() as u8, now.day());
+    let date = format_date(&now);
     writeln!(state.outfile, "{date} {weight:.1}",).unwrap();
     state.data.push((date, weight));
     Response::redirect("/")
 }
 
+fn format_date(date: &OffsetDateTime) -> String {
+    format!(
+        "{}-{:02}-{:02}",
+        date.year(),
+        date.month() as u8,
+        date.day()
+    )
+}
+
 struct State {
     data: Vec<(String, f64)>,
+    config_file: PathBuf,
     outfile: File,
 }
 
@@ -181,6 +192,46 @@ impl State {
                 .unwrap();
         }
         table
+    }
+
+    fn minmax(&self) -> (Option<f64>, Option<f64>) {
+        let mut weights: Vec<_> = self.data.iter().map(|p| p.1).collect();
+        weights.sort_by(f64::total_cmp);
+        let min = weights.first().cloned();
+        let max = weights.last().cloned();
+        (min, max)
+    }
+
+    fn graph(&self) {
+        let name = self.config_file.to_str().unwrap();
+        let now = OffsetDateTime::now_local().unwrap();
+        let start_date = now - 28 * time::Duration::DAY;
+        let date_start = format_date(&start_date);
+        let date_end = format_date(&(now + time::Duration::DAY));
+
+        let mut gp_script = include_str!("plot.gp")
+            .replace("{{name}}", name)
+            .replace("{{date_start}}", &date_start)
+            .replace("{{date_end}}", &date_end);
+        const WEIGHT_PAD: f64 = 5.0;
+        if let (Some(weight_start), Some(weight_end)) = self.minmax() {
+            let weight_start = weight_start - WEIGHT_PAD;
+            let weight_end = weight_end + WEIGHT_PAD;
+            gp_script = gp_script
+                .replace("{{weight_start}}", &weight_start.to_string())
+                .replace("{{weight_end}}", &weight_end.to_string());
+        }
+
+        let mut child = Command::new("gnuplot")
+            .stdin(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut stdin = child.stdin.take().unwrap();
+        std::thread::spawn(move || {
+            stdin.write_all(gp_script.as_bytes()).unwrap();
+        });
+        let output = child.wait().unwrap();
+        assert_eq!(output.code(), Some(0));
     }
 }
 
@@ -215,7 +266,7 @@ fn main() -> std::io::Result<()> {
         .create(true)
         .read(true)
         .append(true)
-        .open(config_file)
+        .open(&config_file)
         .expect("failed to open weights file");
 
     let mut contents = String::new();
@@ -226,6 +277,7 @@ fn main() -> std::io::Result<()> {
     let mut state = State {
         data: cur,
         outfile: config,
+        config_file,
     };
 
     let listener = TcpListener::bind("0.0.0.0:9999")?;
