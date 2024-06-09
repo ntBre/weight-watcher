@@ -124,7 +124,7 @@ fn weight(query: &str) -> Response {
 }
 
 fn main() -> std::io::Result<()> {
-    let listener = TcpListener::bind("127.0.0.1:9999")?;
+    let listener = TcpListener::bind("0.0.0.0:9999")?;
 
     for stream in listener.incoming().map(Result::unwrap) {
         dispatch(stream);
