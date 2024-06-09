@@ -112,7 +112,14 @@ fn index() -> Response {
 }
 
 fn weight(query: &str) -> Response {
-    dbg!(query);
+    let params: Vec<&str> = query.split('=').collect();
+    if params.len() != 2 {
+        return Response::err();
+    }
+    let Ok(w) = params[1].parse::<f64>() else {
+        return Response::err();
+    };
+    println!("got weight = {w}");
     Response::redirect("/")
 }
 
