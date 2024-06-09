@@ -229,7 +229,7 @@ impl State {
                 format!("set yrange [{}:{}]", weight_start, weight_end);
             gp_script = gp_script.replace("{{yrange}}", &weight_range);
         } else {
-            gp_script = gp_script.replace("{{yrange}}", "");
+            gp_script = gp_script.replace("{{yrange}}", "set yrange [0:1000]");
         }
 
         let mut child = Command::new("gnuplot")
