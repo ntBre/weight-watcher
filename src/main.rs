@@ -1,6 +1,6 @@
 use std::{
     fmt::Display,
-    fs::File,
+    fs::{read_to_string, File},
     io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
     path::Path,
@@ -102,7 +102,7 @@ fn dispatch(mut stream: TcpStream, state: &mut State) {
     let parts: Vec<_> = url.split('?').collect();
     assert!(matches!(parts.len(), 1 | 2));
     let response = match parts[0] {
-        "/" => index(),
+        "/" => index(state),
         "/weight" if parts.len() == 2 => weight(parts[1], state),
         _ => {
             Response::err().body(include_str!("../templates/error.html").into())
@@ -111,8 +111,17 @@ fn dispatch(mut stream: TcpStream, state: &mut State) {
     stream.write_all(&response.as_bytes()).unwrap();
 }
 
-fn index() -> Response {
-    Response::ok().body(include_str!("../templates/index.html").into())
+fn index(state: &mut State) -> Response {
+    use std::fmt::Write;
+    let mut table = String::new();
+    for (date, weight) in state.data.iter().rev().take(7) {
+        writeln!(table, "<tr><td>{date}</td><td>{weight:.1}</td></tr>")
+            .unwrap();
+    }
+    let tmpl = read_to_string("templates/index.html")
+        .unwrap()
+        .replace("{{table}}", &table);
+    Response::ok().body(tmpl)
 }
 
 fn weight(query: &str, state: &mut State) -> Response {
